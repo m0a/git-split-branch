@@ -47,35 +47,9 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "重大なエラー: リポジトリのオープンに失敗\n")
 			fmt.Fprintf(os.Stderr, "エラー詳細: %v\n", err)
-			fmt.Fprintf(os.Stderr, "カレントディレクトリ: %s\n", getCurrentDir())
-
-			// gitコマンドで状態を確認
-			gitStatus := exec.Command("git", "status")
-			gitStatus.Stderr = os.Stderr
-			gitStatus.Stdout = os.Stderr
-			if err := gitStatus.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "git statusの実行に失敗: %v\n", err)
-			}
-
 			os.Exit(1)
 		}
 		fmt.Println("リポジトリを正常に開きました")
-
-		// git configの確認
-		fmt.Fprintf(os.Stderr, "Git設定を確認しています...\n")
-		gitConfig, err := repo.Config()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "エラー: Git設定の取得に失敗: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Fprintf(os.Stderr, "Git設定:\n")
-		fmt.Fprintf(os.Stderr, "- User.Name: %s\n", gitConfig.User.Name)
-		fmt.Fprintf(os.Stderr, "- User.Email: %s\n", gitConfig.User.Email)
-		if gitConfig.User.Name == "" || gitConfig.User.Email == "" {
-			fmt.Fprintf(os.Stderr, "エラー: Git設定にユーザー名またはメールアドレスが設定されていません\n")
-			os.Exit(1)
-		}
-		fmt.Fprintf(os.Stderr, "Git設定の確認が完了しました\n")
 
 		// 利用可能なブランチの一覧を表示
 		refs, _ := repo.References()
