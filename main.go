@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -261,13 +262,26 @@ var rootCmd = &cobra.Command{
 				if err = os.MkdirAll(filepath.Dir(file), 0755); err != nil {
 					log.Fatalf("Failed to create directory '%s': %v", filepath.Dir(file), err)
 				}
-				// Checkout the target file from the SOURCE branch
-				checkoutCmd := exec.Command("git", "checkout", sourceBranch, "--", file)
-				checkoutCmd.Stdin = os.Stdin
-				checkoutCmd.Stdout = os.Stdout
-				checkoutCmd.Stderr = os.Stderr
-				if err := checkoutCmd.Run(); err != nil {
-					log.Fatalf("Failed to checkout file '%s': %v", file, err)
+
+				// Checkout the target file from the SOURCE branch using go-git
+				fileContent, err := sourceTree.File(file)
+				if err != nil {
+					log.Fatalf("Failed to get file '%s' from source tree: %v", file, err)
+				}
+
+				fileReader, err := fileContent.Reader()
+				if err != nil {
+					log.Fatalf("Failed to get reader for file '%s': %v", file, err)
+				}
+				defer fileReader.Close()
+
+				fileData, err := io.ReadAll(fileReader)
+				if err != nil {
+					log.Fatalf("Failed to read file '%s': %v", file, err)
+				}
+
+				if err := os.WriteFile(file, fileData, 0644); err != nil {
+					log.Fatalf("Failed to write file '%s': %v", file, err)
 				}
 				// Add to the staging area
 				if _, err := worktree.Add(file); err != nil {
