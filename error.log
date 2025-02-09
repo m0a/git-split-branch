@@ -1,0 +1,10 @@
+カレントディレクトリ: /Users/m0a/repo/github.com/m0a/git-split-branch
+カレントディレクトリからリポジトリを開こうとしています...
+Git設定を確認しています...
+Git設定:
+- User.Name: test
+- User.Email: test@example.com
+Git設定の確認が完了しました
+2025/02/09 13:12:30 
+SOURCE ブランチ 'new' の参照取得に失敗: reference not found
+exit status 1

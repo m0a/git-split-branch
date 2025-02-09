@@ -1,0 +1,21 @@
+=== Test ===
+カレントディレクトリ: /Users/m0a/repo/github.com/m0a/git-split-branch
+カレントディレクトリからリポジトリを開こうとしています...
+リポジトリを正常に開きました
+Git設定を確認しています...
+Git設定:
+- User.Name: test
+- User.Email: test@example.com
+Git設定の確認が完了しました
+
+利用可能なブランチ一覧:
+- main
+BASE ブランチ 'main' の参照を取得しています...
+BASE ブランチ 'main' の参照を正常に取得しました
+SOURCE ブランチ 'new' の参照を取得しています...
+
+利用可能なブランチ一覧:
+- main
+2025/02/09 13:12:03 
+SOURCE ブランチ 'new' の参照取得に失敗: reference not found
+exit status 1
