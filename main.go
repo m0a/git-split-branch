@@ -8,8 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/go-git/go-git/v5"
+	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
@@ -284,7 +285,15 @@ var rootCmd = &cobra.Command{
 				fmt.Printf("No changes to commit in branch '%s'. Skipping commit.\n", group.Name)
 			} else {
 				commitMsg := fmt.Sprintf("Update diff files: %v", group.Files)
-				commitHash, err := worktree.Commit(commitMsg, nil)
+				repoConfig, _ := repo.Config()
+				commitOptions := &git.CommitOptions{
+					Author: &object.Signature{
+						Name:  repoConfig.User.Name,
+						Email: repoConfig.User.Email,
+						When:  sourceCommit.Author.When,
+					},
+				}
+				commitHash, err := worktree.Commit(commitMsg, commitOptions)
 				if err != nil {
 					log.Fatalf("Failed to commit in branch '%s': %v", group.Name, err)
 				}
