@@ -164,11 +164,18 @@ var rootCmd = &cobra.Command{
 			cfg.Branches = append(cfg.Branches, group)
 		}
 
+		// Add description to the YAML data
+		description := "# This YAML file contains the configuration for splitting branches.\n" +
+			"# Each branch group specifies a branch name and the list of files to be included in that branch.\n\n"
+
 		// Output the combined YAML to a temporary file
 		yamlData, err := yaml.Marshal(&cfg)
 		if err != nil {
 			log.Fatalf("Failed to marshal YAML: %v", err)
 		}
+
+		// Prepend the description to the YAML data
+		yamlData = append([]byte(description), yamlData...)
 
 		tmpFile, err := os.CreateTemp("", "split-config-*.yaml")
 		if err != nil {
