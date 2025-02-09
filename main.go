@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -39,8 +38,6 @@ var rootCmd = &cobra.Command{
 	Use:   "git-split",
 	Short: "BASE と SOURCE の差分ファイルを指定個数ごとに新規ブランチへ反映する",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintf(os.Stderr, "カレントディレクトリ: %s\n", getCurrentDir())
-		fmt.Fprintf(os.Stderr, "カレントディレクトリからリポジトリを開こうとしています...\n")
 
 		// リポジトリをカレントディレクトリからオープン
 		repo, err := git.PlainOpen(".")
@@ -317,52 +314,7 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func getCurrentDir() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return fmt.Sprintf("カレントディレクトリの取得に失敗: %v", err)
-	}
-	return dir
-}
-
-func setupLogging() (*os.File, *log.Logger) {
-	logFile, err := os.OpenFile("git-split.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("ログファイルのオープンに失敗: %v", err)
-	}
-
-	// 標準出力とファイルの両方に出力するように設定
-	multiWriter := io.MultiWriter(os.Stdout, logFile)
-	logger := log.New(multiWriter, "", log.LstdFlags)
-
-	return logFile, logger
-}
-
-func checkGitConfig(repo *git.Repository) error {
-	// git configの確認
-	cfg, err := repo.Config()
-	if err != nil {
-		return fmt.Errorf("git configの取得に失敗: %v", err)
-	}
-
-	// ユーザー名とメールアドレスの確認
-	if cfg.User.Name == "" || cfg.User.Email == "" {
-		return fmt.Errorf("git configにユーザー名またはメールアドレスが設定されていません")
-	}
-
-	return nil
-}
-
-func writeDebug(msg string) {
-	f, _ := os.OpenFile("debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	defer f.Close()
-	fmt.Fprintf(f, "[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), msg)
-}
-
 func main() {
-	writeDebug("プログラムを開始します")
-	writeDebug(fmt.Sprintf("カレントディレクトリ: %s", getCurrentDir()))
-
 	rootCmd.Flags().StringVarP(&sourceBranch, "source", "s", "", "差分元のブランチ名 (必須)")
 	rootCmd.Flags().StringVarP(&baseBranch, "base", "b", "main", "比較対象のベースブランチ名")
 	rootCmd.Flags().IntVarP(&filesPerBranch, "number", "n", 0, "1ブランチあたりに反映するファイル数 (必須)")
