@@ -27,7 +27,7 @@ go build -o git-split-branch main.go
 
 ## Usage
 ```bash
-./git-split-branch \
+git split-branch \
   --source feature-branch \
   --base main \
   --number 10 \
@@ -93,7 +93,7 @@ go build -o git-split-branch main.go
 
 ## 使い方
 ```bash
-./git-split-branch \
+  git split-branch \
   --source feature-branch \
   --base main \
   --number 10 \
