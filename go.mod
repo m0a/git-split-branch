@@ -1,4 +1,4 @@
-module git-split-branch
+module github.com/m0a/git-split-branch
 
 go 1.21
 
