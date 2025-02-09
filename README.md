@@ -43,14 +43,19 @@ go build -o git-split-branch main.go
 
 When you run the command, the tool generates a YAML file (`split-config-*.yaml`) that proposes the files to be split and the branch names:
 ```yaml
+# This YAML file contains the configuration for splitting branches.
+# Each branch group specifies a branch name and the list of files to be included in that branch.
+
 branches:
-  - name: split_1
-    files:
-      - file1.txt
-      - src/main.js
-  - name: split_2
-    files: 
-      - docs/README.md
+- name: split_1
+  files:
+  - test/file1.txt
+  - test/file2.txt
+  
+- name: split_2
+  files:
+  - test/file3.txt
+
 ```
 
 After saving, the specified branches will be created.
@@ -105,14 +110,19 @@ go build -o git-split-branch main.go
 コマンドを実行すると、ツールはファイルの分割とブランチ名を提案するYAMLファイル(`split-config-*.yaml`)を生成します:
 
 ```yaml
+# This YAML file contains the configuration for splitting branches.
+# Each branch group specifies a branch name and the list of files to be included in that branch.
+
 branches:
-```- name: split_1
-    files:
-      - file1.txt
-      - src/main.js
-  - name: split_2
-    files: 
-      - docs/README.md
+- name: split_1
+  files:
+  - test/file1.txt
+  - test/file2.txt
+  
+- name: split_2
+  files:
+  - test/file3.txt
+
 ```
 
 保存後に対象のブランチが実際に作成されます。
