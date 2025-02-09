@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -106,6 +107,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("BASE ブランチのコミット取得に失敗: %v", err)
 		}
+		fmt.Fprintf(os.Stderr, "BASE コミットハッシュ: %s\n", baseRef.Hash())
 		baseTree, err := baseCommit.Tree()
 		if err != nil {
 			log.Fatalf("BASE ツリーの取得に失敗: %v", err)
@@ -131,6 +133,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("SOURCE ブランチのコミット取得に失敗: %v", err)
 		}
+		fmt.Fprintf(os.Stderr, "SOURCE コミットハッシュ: %s\n", sourceRef.Hash())
 		sourceTree, err := sourceCommit.Tree()
 		if err != nil {
 			log.Fatalf("SOURCE ツリーの取得に失敗: %v", err)
@@ -211,7 +214,17 @@ var rootCmd = &cobra.Command{
 		if editor == "" {
 			editor = "vi"
 		}
-		editCmd := exec.Command(editor, tmpFileName)
+
+		// エディタコマンドとオプションを分割
+		editorParts := strings.Fields(editor)
+		var editCmd *exec.Cmd
+		if len(editorParts) > 1 {
+			// コマンドに引数がある場合(例:code -w)
+			editCmd = exec.Command(editorParts[0], append(editorParts[1:], tmpFileName)...)
+		} else {
+			// 単一のコマンドの場合(例:vi)
+			editCmd = exec.Command(editor, tmpFileName)
+		}
 		editCmd.Stdin = os.Stdin
 		editCmd.Stdout = os.Stdout
 		editCmd.Stderr = os.Stderr
