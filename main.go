@@ -364,11 +364,10 @@ func main() {
 	writeDebug(fmt.Sprintf("カレントディレクトリ: %s", getCurrentDir()))
 
 	rootCmd.Flags().StringVarP(&sourceBranch, "source", "s", "", "差分元のブランチ名 (必須)")
-	rootCmd.Flags().StringVarP(&baseBranch, "base", "b", "", "比較対象のベースブランチ名 (必須)")
+	rootCmd.Flags().StringVarP(&baseBranch, "base", "b", "main", "比較対象のベースブランチ名")
 	rootCmd.Flags().IntVarP(&filesPerBranch, "number", "n", 0, "1ブランチあたりに反映するファイル数 (必須)")
 	rootCmd.Flags().StringVarP(&branchPrefix, "prefix", "p", "split", "新規ブランチ名のプレフィックス")
 	rootCmd.MarkFlagRequired("source")
-	rootCmd.MarkFlagRequired("base")
 	rootCmd.MarkFlagRequired("number")
 
 	if err := rootCmd.Execute(); err != nil {
