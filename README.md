@@ -40,8 +40,8 @@ go build -o git-split-branch main.go
 - `--number/-n`: Number of files per branch (required)
 - `--prefix/-p`: Branch name prefix (default: split)
 
-## Configuration
-The tool generates a YAML configuration file (`split-config-*.yaml`) with:
+
+When you run the command, the tool generates a YAML file (`split-config-*.yaml`) that proposes the files to be split and the branch names:
 ```yaml
 branches:
   - name: split_1
@@ -52,6 +52,9 @@ branches:
     files: 
       - docs/README.md
 ```
+
+After saving, the specified branches will be created.
+
 
 ## License
 MIT
@@ -98,11 +101,12 @@ go build -o git-split-branch main.go
 - `--number/-n`: 1ブランチあたりのファイル数(必須)
 - `--prefix/-p`: ブランチ名プレフィックス(デフォルト: split)
 
-## 設定
-ツールはYAML設定ファイル(`split-config-*.yaml`)を生成します:
+
+コマンドを実行すると、ツールはファイルの分割とブランチ名を提案するYAMLファイル(`split-config-*.yaml`)を生成します:
+
 ```yaml
 branches:
-  - name: split_1
+```- name: split_1
     files:
       - file1.txt
       - src/main.js
@@ -110,6 +114,9 @@ branches:
     files: 
       - docs/README.md
 ```
+
+保存後に対象のブランチが実際に作成されます。
+
 
 ## ライセンス
 MIT
