@@ -7,17 +7,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 )
 
-// YAML 用の構造体定義
+// Struct definitions for YAML configuration
 type BranchGroup struct {
 	Name  string   `yaml:"name"`
 	Files []string `yaml:"files"`
@@ -35,22 +33,22 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "git-split",
-	Short: "BASE と SOURCE の差分ファイルを指定個数ごとに新規ブランチへ反映する",
+	Use:   "git-split-branch",
+	Short: "Split diff files between two branches into multiple branches",
 	Run: func(cmd *cobra.Command, args []string) {
 
-		// リポジトリをカレントディレクトリからオープン
+		// Open repository from current directory
 		repo, err := git.PlainOpen(".")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "重大なエラー: リポジトリのオープンに失敗\n")
-			fmt.Fprintf(os.Stderr, "エラー詳細: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Critical Error: Failed to open repository\n")
+			fmt.Fprintf(os.Stderr, "Error details: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("リポジトリを正常に開きました")
+		fmt.Println("Repository opened successfully")
 
-		// 利用可能なブランチの一覧を表示
+		// Display available branches
 		refs, _ := repo.References()
-		fmt.Println("\n利用可能なブランチ一覧:")
+		fmt.Println("\nAvailable branches:")
 		_ = refs.ForEach(func(ref *plumbing.Reference) error {
 			if ref.Name().IsBranch() {
 				fmt.Printf("- %s\n", ref.Name().Short())
@@ -58,71 +56,71 @@ var rootCmd = &cobra.Command{
 			return nil
 		})
 
-		// BASE ブランチの最新コミットとツリーを取得
-		fmt.Printf("BASE ブランチ '%s' の参照を取得しています...\n", baseBranch)
+		// Get the latest commit and tree from BASE branch
+		fmt.Printf("Getting reference for BASE branch '%s'...\n", baseBranch)
 		baseRef, err := repo.Reference(plumbing.NewBranchReferenceName(baseBranch), true)
 		if err != nil {
-			// 利用可能なブランチ一覧を表示
+			// Display available branches
 			refs, _ := repo.References()
-			fmt.Println("\n利用可能なブランチ一覧:")
+			fmt.Println("\nAvailable branches:")
 			_ = refs.ForEach(func(ref *plumbing.Reference) error {
 				if ref.Name().IsBranch() {
 					fmt.Printf("- %s\n", ref.Name().Short())
 				}
 				return nil
 			})
-			log.Fatalf("\nBASE ブランチ '%s' の参照取得に失敗: %v", baseBranch, err)
+			log.Fatalf("\nFailed to get reference for BASE branch '%s': %v", baseBranch, err)
 		}
-		fmt.Printf("BASE ブランチ '%s' の参照を正常に取得しました\n", baseBranch)
+		fmt.Printf("Successfully got reference for BASE branch '%s'\n", baseBranch)
 		baseCommit, err := repo.CommitObject(baseRef.Hash())
 		if err != nil {
-			log.Fatalf("BASE ブランチのコミット取得に失敗: %v", err)
+			log.Fatalf("Failed to get commit for BASE branch: %v", err)
 		}
-		fmt.Fprintf(os.Stderr, "BASE コミットハッシュ: %s\n", baseRef.Hash())
+		fmt.Fprintf(os.Stderr, "BASE commit hash: %s\n", baseRef.Hash())
 		baseTree, err := baseCommit.Tree()
 		if err != nil {
-			log.Fatalf("BASE ツリーの取得に失敗: %v", err)
+			log.Fatalf("Failed to get tree for BASE branch: %v", err)
 		}
 
-		// SOURCE ブランチの最新コミットとツリーを取得
-		fmt.Printf("SOURCE ブランチ '%s' の参照を取得しています...\n", sourceBranch)
+		// Get the latest commit and tree from SOURCE branch
+		fmt.Printf("Getting reference for SOURCE branch '%s'...\n", sourceBranch)
 		sourceRef, err := repo.Reference(plumbing.NewBranchReferenceName(sourceBranch), true)
 		if err != nil {
-			// 利用可能なブランチ一覧を表示
+			// Display available branches
 			refs, _ := repo.References()
-			fmt.Println("\n利用可能なブランチ一覧:")
+			fmt.Println("\nAvailable branches:")
 			_ = refs.ForEach(func(ref *plumbing.Reference) error {
 				if ref.Name().IsBranch() {
 					fmt.Printf("- %s\n", ref.Name().Short())
 				}
 				return nil
 			})
-			log.Fatalf("\nSOURCE ブランチ '%s' の参照取得に失敗: %v", sourceBranch, err)
+			log.Fatalf("\nFailed to get reference for SOURCE branch '%s': %v", sourceBranch, err)
 		}
-		fmt.Printf("SOURCE ブランチ '%s' の参照を正常に取得しました\n", sourceBranch)
+		fmt.Printf("Successfully got reference for SOURCE branch '%s'\n", sourceBranch)
 		sourceCommit, err := repo.CommitObject(sourceRef.Hash())
 		if err != nil {
-			log.Fatalf("SOURCE ブランチのコミット取得に失敗: %v", err)
+			log.Fatalf("Failed to get commit for SOURCE branch: %v", err)
 		}
-		fmt.Fprintf(os.Stderr, "SOURCE コミットハッシュ: %s\n", sourceRef.Hash())
+		fmt.Fprintf(os.Stderr, "SOURCE commit hash: %s\n", sourceRef.Hash())
 		sourceTree, err := sourceCommit.Tree()
 		if err != nil {
-			log.Fatalf("SOURCE ツリーの取得に失敗: %v", err)
+			log.Fatalf("Failed to get tree for SOURCE branch: %v", err)
 		}
 
-		// BASE と SOURCE のツリー差分（追加・変更ファイルのみ）を取得
+		// Get the tree differences between BASE and SOURCE (only added/modified files)
 		changes, err := baseTree.Diff(sourceTree)
 		if err != nil {
-			log.Fatalf("差分の取得に失敗: %v", err)
+			log.Fatalf("Failed to get diff: %v", err)
 		}
 
-		// 差分ファイル一覧の作成（削除は対象外）
+		// Create a list of diff files (excluding deletions)
 		fileSet := make(map[string]bool)
 		var diffFiles []string
 		for _, change := range changes {
 			action, err := change.Action()
 			if err != nil {
-				log.Fatalf("Change のアクション取得に失敗: %v", err)
+				log.Fatalf("Failed to get action for change: %v", err)
 			}
 			if action == merkletrie.Delete {
 				continue
@@ -140,15 +138,15 @@ var rootCmd = &cobra.Command{
 		}
 
 		totalFiles := len(diffFiles)
-		fmt.Printf("BASE ブランチ '%s' と SOURCE ブランチ '%s' の差分ファイル数: %d\n", baseBranch, sourceBranch, totalFiles)
+		fmt.Printf("Diff files count between BASE branch '%s' and SOURCE branch '%s': %d\n", baseBranch, sourceBranch, totalFiles)
 		if totalFiles == 0 {
-			fmt.Println("差分ファイルがありません。")
+			fmt.Println("No diff files found.")
 			return
 		}
 
-		// 指定個数ごとにファイル一覧をグループ分けし、SplitConfig 構造体にまとめる
+		// Group the list of files into chunks of the specified size and add them to the SplitConfig struct
 		numBranches := (totalFiles + filesPerBranch - 1) / filesPerBranch
-		fmt.Printf("作成するブランチ数: %d\n", numBranches)
+		fmt.Printf("Number of branches to be created: %d\n", numBranches)
 
 		var cfg SplitConfig
 		for i := 0; i < numBranches; i++ {
@@ -164,86 +162,82 @@ var rootCmd = &cobra.Command{
 			cfg.Branches = append(cfg.Branches, group)
 		}
 
-		// 1ファイルにまとめた YAML として一時ファイルに出力
+		// Output the combined YAML to a temporary file
 		yamlData, err := yaml.Marshal(&cfg)
 		if err != nil {
-			log.Fatalf("YAML へのマーシャルに失敗: %v", err)
+			log.Fatalf("Failed to marshal YAML: %v", err)
 		}
 
 		tmpFile, err := os.CreateTemp("", "split-config-*.yaml")
 		if err != nil {
-			log.Fatalf("一時ファイルの作成に失敗: %v", err)
+			log.Fatalf("Failed to create temporary file: %v", err)
 		}
 		tmpFileName := tmpFile.Name()
 		if _, err := tmpFile.Write(yamlData); err != nil {
-			log.Fatalf("一時ファイルへの書き込みに失敗: %v", err)
+			log.Fatalf("Failed to write to temporary file: %v", err)
 		}
 		tmpFile.Close()
 
-		// EDITOR (未設定なら "vi") で一時 YAML ファイルを編集
+		// Edit the temporary YAML file with the EDITOR (default is "vi")
 		editor := os.Getenv("EDITOR")
 		if editor == "" {
 			editor = "vi"
 		}
 
-		// エディタコマンドとオプションを分割
+		// Split the editor command and options
 		editorParts := strings.Fields(editor)
 		var editCmd *exec.Cmd
 		if len(editorParts) > 1 {
-			// コマンドに引数がある場合(例:code -w)
 			editCmd = exec.Command(editorParts[0], append(editorParts[1:], tmpFileName)...)
 		} else {
-			// 単一のコマンドの場合(例:vi)
 			editCmd = exec.Command(editor, tmpFileName)
 		}
 		editCmd.Stdin = os.Stdin
 		editCmd.Stdout = os.Stdout
 		editCmd.Stderr = os.Stderr
 		if err := editCmd.Run(); err != nil {
-			log.Fatalf("エディタの起動に失敗: %v", err)
+			log.Fatalf("Failed to launch editor: %v", err)
 		}
 
-		// 編集後の YAML を読み込み、パース
+		// Read and parse the edited YAML
 		editedData, err := os.ReadFile(tmpFileName)
 		if err != nil {
-			log.Fatalf("編集後の一時ファイルの読み込みに失敗: %v", err)
+			log.Fatalf("Failed to read the edited temporary file: %v", err)
 		}
-		// 一時ファイルは不要なので削除
 		os.Remove(tmpFileName)
 
 		var editedConfig SplitConfig
 		if err := yaml.Unmarshal(editedData, &editedConfig); err != nil {
-			log.Fatalf("編集後 YAML のパースに失敗: %v", err)
+			log.Fatalf("Failed to parse edited YAML: %v", err)
 		}
 
-		// 現在のブランチ名を保存
+		// Save the current branch name
 		headRef, err := repo.Head()
 		if err != nil {
-			log.Fatalf("HEAD の取得に失敗: %v", err)
+			log.Fatalf("Failed to get HEAD: %v", err)
 		}
 		currentBranch := headRef.Name().Short()
-
-		// ワークツリーを取得
+		// Get the worktree
 		worktree, err := repo.Worktree()
 		if err != nil {
-			log.Fatalf("ワークツリーの取得に失敗: %v", err)
+			log.Fatalf("Failed to get worktree: %v", err)
 		}
 
-		// 各グループごとに新規ブランチを作成して SOURCE ブランチの内容で更新
+		// Create a new branch for each group and update with the contents from the SOURCE branch
 		for _, group := range editedConfig.Branches {
-			// 編集後にファイルが空の場合はスキップ
+			// Skip if the file list is empty after editing
 			if len(group.Files) == 0 {
-				fmt.Printf("ブランチ '%s' では対象ファイルがないため、スキップします。\n", group.Name)
+				fmt.Printf("Skipping branch '%s' as there are no target files.\n", group.Name)
 				continue
 			}
-			fmt.Printf("==> ブランチ '%s' を作成中（対象ファイル数: %d）\n", group.Name, len(group.Files))
+			fmt.Printf("==> Creating branch '%s' (number of target files: %d)\n", group.Name, len(group.Files))
 
-			// BASE ブランチにチェックアウトしてから新規ブランチを作成
+			// Checkout to the BASE branch before creating a new branch
 			err = worktree.Checkout(&git.CheckoutOptions{
 				Branch: plumbing.NewBranchReferenceName(baseBranch),
 			})
 			if err != nil {
-				log.Fatalf("BASE ブランチへのチェックアウトに失敗: %v", err)
+				log.Fatalf("Failed to checkout to BASE branch: %v", err)
 			}
 			err = worktree.Checkout(&git.CheckoutOptions{
 				Branch: plumbing.NewBranchReferenceName(group.Name),
@@ -251,74 +245,68 @@ var rootCmd = &cobra.Command{
 				Hash:   baseCommit.Hash,
 			})
 			if err != nil {
-				log.Fatalf("新規ブランチ '%s' の作成に失敗: %v", group.Name, err)
+				log.Fatalf("Failed to create new branch '%s': %v", group.Name, err)
 			}
 
-			// 各ファイルについて、SOURCE ブランチの内容で上書き
+			// Overwrite each file with the contents from the SOURCE branch
 			for _, file := range group.Files {
-				// SOURCE ブランチ上にファイルが存在するか確認
+				// Check if the file exists in the SOURCE branch
 				_, err := sourceTree.File(file)
 				if err != nil {
-					fmt.Printf("注意: '%s' は SOURCE ブランチ上に存在しません。\n", file)
+					fmt.Printf("Warning: '%s' does not exist in SOURCE branch.\n", file)
 					continue
 				}
-				// 必要なディレクトリ作成
+				// Create necessary directories
 				if err = os.MkdirAll(filepath.Dir(file), 0755); err != nil {
-					log.Fatalf("ディレクトリ '%s' の作成に失敗: %v", filepath.Dir(file), err)
+					log.Fatalf("Failed to create directory '%s': %v", filepath.Dir(file), err)
 				}
-				// SOURCE ブランチから対象ファイルをチェックアウト
+				// Checkout the target file from the SOURCE branch
 				checkoutCmd := exec.Command("git", "checkout", sourceBranch, "--", file)
 				checkoutCmd.Stdin = os.Stdin
 				checkoutCmd.Stdout = os.Stdout
 				checkoutCmd.Stderr = os.Stderr
 				if err := checkoutCmd.Run(); err != nil {
-					log.Fatalf("ファイル '%s' のチェックアウトに失敗: %v", file, err)
+					log.Fatalf("Failed to checkout file '%s': %v", file, err)
 				}
-				// ステージに追加
+				// Add to the staging area
 				if _, err := worktree.Add(file); err != nil {
-					log.Fatalf("ファイル '%s' のステージ追加に失敗: %v", file, err)
+					log.Fatalf("Failed to add file '%s' to staging: %v", file, err)
 				}
-				fmt.Printf("更新: %s\n", file)
+				fmt.Printf("Updated: %s\n", file)
 			}
 
-			// ステージ済み変更があればコミット
+			// Commit if there are staged changes
 			status, err := worktree.Status()
 			if err != nil {
-				log.Fatalf("ワークツリーの状態取得に失敗: %v", err)
+				log.Fatalf("Failed to get worktree status: %v", err)
 			}
 			if status.IsClean() {
-				fmt.Printf("ブランチ '%s' では変更がなかったため、コミットをスキップします。\n", group.Name)
+				fmt.Printf("No changes to commit in branch '%s'. Skipping commit.\n", group.Name)
 			} else {
 				commitMsg := fmt.Sprintf("Update diff files: %v", group.Files)
-				commitHash, err := worktree.Commit(commitMsg, &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  "go-git-user",
-						Email: "go-git@example.com",
-						When:  time.Now(),
-					},
-				})
+				commitHash, err := worktree.Commit(commitMsg, nil)
 				if err != nil {
-					log.Fatalf("ブランチ '%s' でのコミットに失敗: %v", group.Name, err)
+					log.Fatalf("Failed to commit in branch '%s': %v", group.Name, err)
 				}
-				fmt.Printf("ブランチ '%s' にコミット完了: %s\n", group.Name, commitHash)
+				fmt.Printf("Committed to branch '%s': %s\n", group.Name, commitHash)
 			}
 		}
 
-		// 最後に元のブランチに戻る
+		// Finally, checkout back to the original branch
 		if err := worktree.Checkout(&git.CheckoutOptions{
 			Branch: plumbing.NewBranchReferenceName(currentBranch),
 		}); err != nil {
-			log.Fatalf("元ブランチ '%s' へのチェックアウトに失敗: %v", currentBranch, err)
+			log.Fatalf("Failed to checkout back to original branch '%s': %v", currentBranch, err)
 		}
-		fmt.Printf("完了。元ブランチ '%s' に戻りました。\n", currentBranch)
+		fmt.Printf("Completed. Returned to original branch '%s'.\n", currentBranch)
 	},
 }
 
 func main() {
-	rootCmd.Flags().StringVarP(&sourceBranch, "source", "s", "", "差分元のブランチ名 (必須)")
-	rootCmd.Flags().StringVarP(&baseBranch, "base", "b", "main", "比較対象のベースブランチ名")
-	rootCmd.Flags().IntVarP(&filesPerBranch, "number", "n", 0, "1ブランチあたりに反映するファイル数 (必須)")
-	rootCmd.Flags().StringVarP(&branchPrefix, "prefix", "p", "split", "新規ブランチ名のプレフィックス")
+	rootCmd.Flags().StringVarP(&sourceBranch, "source", "s", "", "Name of the source branch for diff (required)")
+	rootCmd.Flags().StringVarP(&baseBranch, "base", "b", "main", "Name of the base branch for comparison")
+	rootCmd.Flags().IntVarP(&filesPerBranch, "number", "n", 0, "Number of files per branch (required)")
+	rootCmd.Flags().StringVarP(&branchPrefix, "prefix", "p", "split", "Prefix for new branch names")
 	rootCmd.MarkFlagRequired("source")
 	rootCmd.MarkFlagRequired("number")
 
