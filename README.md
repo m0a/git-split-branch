@@ -7,12 +7,6 @@ A Git utility tool to split differences between two branches into multiple branc
 ## Overview
 This tool helps manage large code changes by splitting diffs between a source branch and base branch into multiple smaller branches. Useful for breaking down big PRs/MRs into manageable chunks.
 
-## Features
-- Compare two Git branches and detect changed files
-- Create multiple branches containing subsets of changed files
-- Interactive YAML configuration file editing
-- Preserves original commit metadata
-- Automatic directory structure handling
 
 ## Installation
 ```bash
@@ -73,12 +67,6 @@ Gitブランチ間の差分を複数のブランチに分割するユーティ�
 ## 概要
 このツールは、ソースブランチとベースブランチ間の差分を検出し、変更ファイルを複数の小さなブランチに分割します。大規模なPR/MRを管理しやすいサイズに分割する際に有用です。
 
-## 特徴
-- Gitブランチの比較と変更ファイルの検出
-- 変更ファイルを分割した複数ブランチの作成
-- インタラクティブなYAML設定ファイル編集
-- オリジナルのコミットメタデータ保持
-- 自動ディレクトリ構造処理
 
 ## インストール方法
 ```bash
