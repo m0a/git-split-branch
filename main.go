@@ -248,6 +248,16 @@ func readEditedYAMLFile(tmpFileName string) (SplitConfig, error) {
 	return editedConfig, nil
 }
 
+func getCommitLogs(file string) (string, error) {
+	cmd := exec.Command("git", "log", "--pretty=format:%s", "--", file)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error getting commit logs for %s: %v\n", file, err)
+		return "", fmt.Errorf("failed to get commit logs for file '%s': %v", file, err)
+	}
+	return string(out), nil
+}
+
 func createBranches(repo *git.Repository, baseCommit *object.Commit, sourceTree *object.Tree, cfg SplitConfig) error {
 	headRef, err := repo.Head()
 	if err != nil {
@@ -265,6 +275,12 @@ func createBranches(repo *git.Repository, baseCommit *object.Commit, sourceTree 
 			continue
 		}
 		fmt.Printf("==> Creating branch '%s' (number of target files: %d)\n", group.Name, len(group.Files))
+
+		cmd := exec.Command("git", "add", ".")
+		err = cmd.Run()
+		if err != nil {
+			return fmt.Errorf("failed to add all files to staging: %v", err)
+		}
 
 		if err := worktree.Checkout(&git.CheckoutOptions{
 			Branch: plumbing.NewBranchReferenceName(baseBranch),
@@ -314,14 +330,24 @@ func createBranches(repo *git.Repository, baseCommit *object.Commit, sourceTree 
 		}
 
 		status, err := worktree.Status()
+		var commitMsg string
+		commitMsgs := []string{}
+		for _, file := range group.Files {
+			logs, err := getCommitLogs(file)
+			if err != nil {
+				return err
+			}
+			commitMsgs = append(commitMsgs, logs)
+		}
+		commitMsg = strings.Join(commitMsgs, "\n")
+		fmt.Printf("Commit message: %s\n", commitMsg)
 		if err != nil {
 			return fmt.Errorf("failed to get worktree status: %v", err)
 		}
 		if status.IsClean() {
 			fmt.Printf("No changes to commit in branch '%s'. Skipping commit.\n", group.Name)
 		} else {
-			commitMsg := fmt.Sprintf("Update diff files: %v", group.Files)
-			cmd := exec.Command("git", "commit", "-m", commitMsg)
+			cmd = exec.Command("git", "commit", "-m", commitMsg)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
