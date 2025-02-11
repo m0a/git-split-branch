@@ -37,299 +37,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "git-split-branch",
 	Short: "Split diff files between two branches into multiple branches",
-	Run: func(cmd *cobra.Command, args []string) {
-
-		// Open repository from current directory
-		repo, err := git.PlainOpen(".")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Critical Error: Failed to open repository\n")
-			fmt.Fprintf(os.Stderr, "Error details: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("Repository opened successfully")
-
-		// Display available branches
-		refs, _ := repo.References()
-		fmt.Println("\nAvailable branches:")
-		_ = refs.ForEach(func(ref *plumbing.Reference) error {
-			if ref.Name().IsBranch() {
-				fmt.Printf("- %s\n", ref.Name().Short())
-			}
-			return nil
-		})
-
-		// Get the latest commit and tree from BASE branch
-		fmt.Printf("Getting reference for BASE branch '%s'...\n", baseBranch)
-		baseRef, err := repo.Reference(plumbing.NewBranchReferenceName(baseBranch), true)
-		if err != nil {
-			// Display available branches
-			refs, _ := repo.References()
-			fmt.Println("\nAvailable branches:")
-			_ = refs.ForEach(func(ref *plumbing.Reference) error {
-				if ref.Name().IsBranch() {
-					fmt.Printf("- %s\n", ref.Name().Short())
-				}
-				return nil
-			})
-			log.Fatalf("\nFailed to get reference for BASE branch '%s': %v", baseBranch, err)
-		}
-		fmt.Printf("Successfully got reference for BASE branch '%s'\n", baseBranch)
-		baseCommit, err := repo.CommitObject(baseRef.Hash())
-		if err != nil {
-			log.Fatalf("Failed to get commit for BASE branch: %v", err)
-		}
-		fmt.Fprintf(os.Stderr, "BASE commit hash: %s\n", baseRef.Hash())
-		baseTree, err := baseCommit.Tree()
-		if err != nil {
-			log.Fatalf("Failed to get tree for BASE branch: %v", err)
-		}
-
-		// Get the latest commit and tree from SOURCE branch
-		fmt.Printf("Getting reference for SOURCE branch '%s'...\n", sourceBranch)
-		sourceRef, err := repo.Reference(plumbing.NewBranchReferenceName(sourceBranch), true)
-		if err != nil {
-			// Display available branches
-			refs, _ := repo.References()
-			fmt.Println("\nAvailable branches:")
-			_ = refs.ForEach(func(ref *plumbing.Reference) error {
-				if ref.Name().IsBranch() {
-					fmt.Printf("- %s\n", ref.Name().Short())
-				}
-				return nil
-			})
-			log.Fatalf("\nFailed to get reference for SOURCE branch '%s': %v", sourceBranch, err)
-		}
-		fmt.Printf("Successfully got reference for SOURCE branch '%s'\n", sourceBranch)
-		sourceCommit, err := repo.CommitObject(sourceRef.Hash())
-		if err != nil {
-			log.Fatalf("Failed to get commit for SOURCE branch: %v", err)
-		}
-		fmt.Fprintf(os.Stderr, "SOURCE commit hash: %s\n", sourceRef.Hash())
-		sourceTree, err := sourceCommit.Tree()
-		if err != nil {
-			log.Fatalf("Failed to get tree for SOURCE branch: %v", err)
-		}
-
-		// Get the tree differences between BASE and SOURCE (only added/modified files)
-		changes, err := baseTree.Diff(sourceTree)
-		if err != nil {
-			log.Fatalf("Failed to get diff: %v", err)
-		}
-
-		// Create a list of diff files (excluding deletions)
-		fileSet := make(map[string]bool)
-		var diffFiles []string
-		for _, change := range changes {
-			action, err := change.Action()
-			if err != nil {
-				log.Fatalf("Failed to get action for change: %v", err)
-			}
-			if action == merkletrie.Delete {
-				continue
-			}
-			var fileName string
-			if change.To.Name != "" {
-				fileName = change.To.Name
-			} else if change.From.Name != "" {
-				fileName = change.From.Name
-			}
-			if fileName != "" && !fileSet[fileName] {
-				diffFiles = append(diffFiles, fileName)
-				fileSet[fileName] = true
-			}
-		}
-
-		totalFiles := len(diffFiles)
-		fmt.Printf("Diff files count between BASE branch '%s' and SOURCE branch '%s': %d\n", baseBranch, sourceBranch, totalFiles)
-		if totalFiles == 0 {
-			fmt.Println("No diff files found.")
-			return
-		}
-
-		// Group the list of files into chunks of the specified size and add them to the SplitConfig struct
-		numBranches := (totalFiles + filesPerBranch - 1) / filesPerBranch
-		fmt.Printf("Number of branches to be created: %d\n", numBranches)
-
-		var cfg SplitConfig
-		for i := 0; i < numBranches; i++ {
-			start := i * filesPerBranch
-			end := start + filesPerBranch
-			if end > totalFiles {
-				end = totalFiles
-			}
-			group := BranchGroup{
-				Name:  fmt.Sprintf("%s_%d", branchPrefix, i+1),
-				Files: diffFiles[start:end],
-			}
-			cfg.Branches = append(cfg.Branches, group)
-		}
-
-		// Add description to the YAML data
-		description := "# This YAML file contains the configuration for splitting branches.\n" +
-			"# Each branch group specifies a branch name and the list of files to be included in that branch.\n\n"
-
-		// Output the combined YAML to a temporary file
-		yamlData, err := yaml.Marshal(&cfg)
-		if err != nil {
-			log.Fatalf("Failed to marshal YAML: %v", err)
-		}
-
-		// Prepend the description to the YAML data
-		yamlData = append([]byte(description), yamlData...)
-
-		tmpFile, err := os.CreateTemp("", "split-config-*.yaml")
-		if err != nil {
-			log.Fatalf("Failed to create temporary file: %v", err)
-		}
-		tmpFileName := tmpFile.Name()
-		if _, err := tmpFile.Write(yamlData); err != nil {
-			log.Fatalf("Failed to write to temporary file: %v", err)
-		}
-		tmpFile.Close()
-
-		// Edit the temporary YAML file with the EDITOR (default is "vi")
-		editor := os.Getenv("EDITOR")
-		if editor == "" {
-			editor = "vi"
-		}
-
-		// Split the editor command and options
-		editorParts := strings.Fields(editor)
-		var editCmd *exec.Cmd
-		if len(editorParts) > 1 {
-			editCmd = exec.Command(editorParts[0], append(editorParts[1:], tmpFileName)...)
-		} else {
-			editCmd = exec.Command(editor, tmpFileName)
-		}
-		editCmd.Stdin = os.Stdin
-		editCmd.Stdout = os.Stdout
-		editCmd.Stderr = os.Stderr
-		if err := editCmd.Run(); err != nil {
-			log.Fatalf("Failed to launch editor: %v", err)
-		}
-
-		// Read and parse the edited YAML
-		editedData, err := os.ReadFile(tmpFileName)
-		if err != nil {
-			log.Fatalf("Failed to read the edited temporary file: %v", err)
-		}
-		os.Remove(tmpFileName)
-
-		var editedConfig SplitConfig
-		if err := yaml.Unmarshal(editedData, &editedConfig); err != nil {
-			log.Fatalf("Failed to parse edited YAML: %v", err)
-		}
-
-		// Save the current branch name
-		headRef, err := repo.Head()
-		if err != nil {
-			log.Fatalf("Failed to get HEAD: %v", err)
-		}
-		currentBranch := headRef.Name().Short()
-		// Get the worktree
-		worktree, err := repo.Worktree()
-		if err != nil {
-			log.Fatalf("Failed to get worktree: %v", err)
-		}
-
-		// Create a new branch for each group and update with the contents from the SOURCE branch
-		for _, group := range editedConfig.Branches {
-			// Skip if the file list is empty after editing
-			if len(group.Files) == 0 {
-				fmt.Printf("Skipping branch '%s' as there are no target files.\n", group.Name)
-				continue
-			}
-			fmt.Printf("==> Creating branch '%s' (number of target files: %d)\n", group.Name, len(group.Files))
-
-			// Checkout to the BASE branch before creating a new branch
-			err = worktree.Checkout(&git.CheckoutOptions{
-				Branch: plumbing.NewBranchReferenceName(baseBranch),
-			})
-			if err != nil {
-				log.Fatalf("Failed to checkout to BASE branch: %v", err)
-			}
-			err = worktree.Checkout(&git.CheckoutOptions{
-				Branch: plumbing.NewBranchReferenceName(group.Name),
-				Create: true,
-				Hash:   baseCommit.Hash,
-			})
-			if err != nil {
-				log.Fatalf("Failed to create new branch '%s': %v", group.Name, err)
-			}
-
-			// Overwrite each file with the contents from the SOURCE branch
-			for _, file := range group.Files {
-				// Check if the file exists in the SOURCE branch
-				_, err := sourceTree.File(file)
-				if err != nil {
-					fmt.Printf("Warning: '%s' does not exist in SOURCE branch.\n", file)
-					continue
-				}
-				// Create necessary directories
-				if err = os.MkdirAll(filepath.Dir(file), 0755); err != nil {
-					log.Fatalf("Failed to create directory '%s': %v", filepath.Dir(file), err)
-				}
-
-				// Checkout the target file from the SOURCE branch using go-git
-				fileContent, err := sourceTree.File(file)
-				if err != nil {
-					log.Fatalf("Failed to get file '%s' from source tree: %v", file, err)
-				}
-
-				fileReader, err := fileContent.Reader()
-				if err != nil {
-					log.Fatalf("Failed to get reader for file '%s': %v", file, err)
-				}
-				defer fileReader.Close()
-
-				fileData, err := io.ReadAll(fileReader)
-				if err != nil {
-					log.Fatalf("Failed to read file '%s': %v", file, err)
-				}
-
-				if err := os.WriteFile(file, fileData, 0644); err != nil {
-					log.Fatalf("Failed to write file '%s': %v", file, err)
-				}
-				// Add to the staging area
-				if _, err := worktree.Add(file); err != nil {
-					log.Fatalf("Failed to add file '%s' to staging: %v", file, err)
-				}
-				fmt.Printf("Updated: %s\n", file)
-			}
-
-			// Commit if there are staged changes
-			status, err := worktree.Status()
-			if err != nil {
-				log.Fatalf("Failed to get worktree status: %v", err)
-			}
-			if status.IsClean() {
-				fmt.Printf("No changes to commit in branch '%s'. Skipping commit.\n", group.Name)
-			} else {
-				commitMsg := fmt.Sprintf("Update diff files: %v", group.Files)
-				repoConfig, _ := repo.Config()
-				commitOptions := &git.CommitOptions{
-					Author: &object.Signature{
-						Name:  repoConfig.User.Name,
-						Email: repoConfig.User.Email,
-						When:  sourceCommit.Author.When,
-					},
-				}
-				commitHash, err := worktree.Commit(commitMsg, commitOptions)
-				if err != nil {
-					log.Fatalf("Failed to commit in branch '%s': %v", group.Name, err)
-				}
-				fmt.Printf("Committed to branch '%s': %s\n", group.Name, commitHash)
-			}
-		}
-
-		// Finally, checkout back to the original branch
-		if err := worktree.Checkout(&git.CheckoutOptions{
-			Branch: plumbing.NewBranchReferenceName(currentBranch),
-		}); err != nil {
-			log.Fatalf("Failed to checkout back to original branch '%s': %v", currentBranch, err)
-		}
-		fmt.Printf("Completed. Returned to original branch '%s'.\n", currentBranch)
-	},
+	Run:   run,
 }
 
 func main() {
@@ -344,4 +52,290 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func run(cmd *cobra.Command, args []string) {
+	repo, err := openRepository()
+	if err != nil {
+		log.Fatalf("Critical Error: %v", err)
+	}
+	displayBranches(repo)
+
+	baseCommit, baseTree, err := getBranchCommitAndTree(repo, baseBranch)
+	if err != nil {
+		log.Fatalf("Failed to get base branch details: %v", err)
+	}
+
+	_, sourceTree, err := getBranchCommitAndTree(repo, sourceBranch)
+	if err != nil {
+		log.Fatalf("Failed to get source branch details: %v", err)
+	}
+
+	diffFiles, err := getDiffFiles(baseTree, sourceTree)
+	if err != nil {
+		log.Fatalf("Failed to get diff files: %v", err)
+	}
+
+	if len(diffFiles) == 0 {
+		fmt.Println("No diff files found.")
+		return
+	}
+
+	cfg := createSplitConfig(diffFiles)
+	tmpFileName, err := createTempYAMLFile(cfg)
+	if err != nil {
+		log.Fatalf("Failed to create temporary YAML file: %v", err)
+	}
+
+	if err := editYAMLFile(tmpFileName); err != nil {
+		log.Fatalf("Failed to edit YAML file: %v", err)
+	}
+
+	editedConfig, err := readEditedYAMLFile(tmpFileName)
+	if err != nil {
+		log.Fatalf("Failed to read edited YAML file: %v", err)
+	}
+
+	if err := createBranches(repo, baseCommit, sourceTree, editedConfig); err != nil {
+		log.Fatalf("Failed to create branches: %v", err)
+	}
+}
+
+func openRepository() (*git.Repository, error) {
+	repo, err := git.PlainOpen(".")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repository: %v", err)
+	}
+	fmt.Println("Repository opened successfully")
+	return repo, nil
+}
+
+func displayBranches(repo *git.Repository) {
+	refs, _ := repo.References()
+	fmt.Println("\nAvailable branches:")
+	_ = refs.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Name().IsBranch() {
+			fmt.Printf("- %s\n", ref.Name().Short())
+		}
+		return nil
+	})
+}
+
+func getBranchCommitAndTree(repo *git.Repository, branchName string) (*object.Commit, *object.Tree, error) {
+	fmt.Printf("Getting reference for branch '%s'...\n", branchName)
+	ref, err := repo.Reference(plumbing.NewBranchReferenceName(branchName), true)
+	if err != nil {
+		displayBranches(repo)
+		return nil, nil, fmt.Errorf("failed to get reference for branch '%s': %v", branchName, err)
+	}
+	fmt.Printf("Successfully got reference for branch '%s'\n", branchName)
+	commit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get commit for branch '%s': %v", branchName, err)
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get tree for branch '%s': %v", branchName, err)
+	}
+	return commit, tree, nil
+}
+
+func getDiffFiles(baseTree, sourceTree *object.Tree) ([]string, error) {
+	changes, err := baseTree.Diff(sourceTree)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get diff: %v", err)
+	}
+
+	fileSet := make(map[string]bool)
+	var diffFiles []string
+	for _, change := range changes {
+		action, err := change.Action()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get action for change: %v", err)
+		}
+		if action == merkletrie.Delete {
+			continue
+		}
+		var fileName string
+		if change.To.Name != "" {
+			fileName = change.To.Name
+		} else if change.From.Name != "" {
+			fileName = change.From.Name
+		}
+		if fileName != "" && !fileSet[fileName] {
+			diffFiles = append(diffFiles, fileName)
+			fileSet[fileName] = true
+		}
+	}
+
+	fmt.Printf("Diff files count: %d\n", len(diffFiles))
+	return diffFiles, nil
+}
+
+func createSplitConfig(diffFiles []string) SplitConfig {
+	totalFiles := len(diffFiles)
+	numBranches := (totalFiles + filesPerBranch - 1) / filesPerBranch
+	fmt.Printf("Number of branches to be created: %d\n", numBranches)
+
+	var cfg SplitConfig
+	for i := 0; i < numBranches; i++ {
+		start := i * filesPerBranch
+		end := start + filesPerBranch
+		if end > totalFiles {
+			end = totalFiles
+		}
+		group := BranchGroup{
+			Name:  fmt.Sprintf("%s_%d", branchPrefix, i+1),
+			Files: diffFiles[start:end],
+		}
+		cfg.Branches = append(cfg.Branches, group)
+	}
+	return cfg
+}
+
+func createTempYAMLFile(cfg SplitConfig) (string, error) {
+	description := "# This YAML file contains the configuration for splitting branches.\n" +
+		"# Each branch group specifies a branch name and the list of files to be included in that branch.\n\n"
+
+	yamlData, err := yaml.Marshal(&cfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal YAML: %v", err)
+	}
+
+	yamlData = append([]byte(description), yamlData...)
+	tmpFile, err := os.CreateTemp("", "split-config-*.yaml")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary file: %v", err)
+	}
+	tmpFileName := tmpFile.Name()
+	if _, err := tmpFile.Write(yamlData); err != nil {
+		return "", fmt.Errorf("failed to write to temporary file: %v", err)
+	}
+	tmpFile.Close()
+	return tmpFileName, nil
+}
+
+func editYAMLFile(tmpFileName string) error {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	editorParts := strings.Fields(editor)
+	var editCmd *exec.Cmd
+	if len(editorParts) > 1 {
+		editCmd = exec.Command(editorParts[0], append(editorParts[1:], tmpFileName)...)
+	} else {
+		editCmd = exec.Command(editor, tmpFileName)
+	}
+	editCmd.Stdin = os.Stdin
+	editCmd.Stdout = os.Stdout
+	editCmd.Stderr = os.Stderr
+	return editCmd.Run()
+}
+
+func readEditedYAMLFile(tmpFileName string) (SplitConfig, error) {
+	editedData, err := os.ReadFile(tmpFileName)
+	if err != nil {
+		return SplitConfig{}, fmt.Errorf("failed to read the edited temporary file: %v", err)
+	}
+	os.Remove(tmpFileName)
+
+	var editedConfig SplitConfig
+	if err := yaml.Unmarshal(editedData, &editedConfig); err != nil {
+		return SplitConfig{}, fmt.Errorf("failed to parse edited YAML: %v", err)
+	}
+	return editedConfig, nil
+}
+
+func createBranches(repo *git.Repository, baseCommit *object.Commit, sourceTree *object.Tree, cfg SplitConfig) error {
+	headRef, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD: %v", err)
+	}
+	currentBranch := headRef.Name().Short()
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %v", err)
+	}
+
+	for _, group := range cfg.Branches {
+		if len(group.Files) == 0 {
+			fmt.Printf("Skipping branch '%s' as there are no target files.\n", group.Name)
+			continue
+		}
+		fmt.Printf("==> Creating branch '%s' (number of target files: %d)\n", group.Name, len(group.Files))
+
+		if err := worktree.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName(baseBranch),
+		}); err != nil {
+			return fmt.Errorf("failed to checkout to BASE branch: %v", err)
+		}
+		if err := worktree.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName(group.Name),
+			Create: true,
+			Hash:   baseCommit.Hash,
+		}); err != nil {
+			return fmt.Errorf("failed to create new branch '%s': %v", group.Name, err)
+		}
+
+		for _, file := range group.Files {
+			if _, err := sourceTree.File(file); err != nil {
+				fmt.Printf("Warning: '%s' does not exist in SOURCE branch.\n", file)
+				continue
+			}
+			if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+				return fmt.Errorf("failed to create directory '%s': %v", filepath.Dir(file), err)
+			}
+
+			fileContent, err := sourceTree.File(file)
+			if err != nil {
+				return fmt.Errorf("failed to get file '%s' from source tree: %v", file, err)
+			}
+
+			fileReader, err := fileContent.Reader()
+			if err != nil {
+				return fmt.Errorf("failed to get reader for file '%s': %v", file, err)
+			}
+			defer fileReader.Close()
+
+			fileData, err := io.ReadAll(fileReader)
+			if err != nil {
+				return fmt.Errorf("failed to read file '%s': %v", file, err)
+			}
+
+			if err := os.WriteFile(file, fileData, 0644); err != nil {
+				return fmt.Errorf("failed to write file '%s': %v", file, err)
+			}
+			if _, err := worktree.Add(file); err != nil {
+				return fmt.Errorf("failed to add file '%s' to staging: %v", file, err)
+			}
+			fmt.Printf("Updated: %s\n", file)
+		}
+
+		status, err := worktree.Status()
+		if err != nil {
+			return fmt.Errorf("failed to get worktree status: %v", err)
+		}
+		if status.IsClean() {
+			fmt.Printf("No changes to commit in branch '%s'. Skipping commit.\n", group.Name)
+		} else {
+			commitMsg := fmt.Sprintf("Update diff files: %v", group.Files)
+			cmd := exec.Command("git", "commit", "-m", commitMsg)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("failed to commit in branch '%s': %v", group.Name, err)
+			}
+			fmt.Printf("Committed to branch '%s'\n", group.Name)
+		}
+	}
+
+	if err := worktree.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(currentBranch),
+	}); err != nil {
+		return fmt.Errorf("failed to checkout back to original branch '%s': %v", currentBranch, err)
+	}
+	fmt.Printf("Completed. Returned to original branch '%s'.\n", currentBranch)
+	return nil
 }
