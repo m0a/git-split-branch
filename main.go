@@ -276,12 +276,6 @@ func createBranches(repo *git.Repository, baseCommit *object.Commit, sourceTree 
 		}
 		fmt.Printf("==> Creating branch '%s' (number of target files: %d)\n", group.Name, len(group.Files))
 
-		cmd := exec.Command("git", "add", ".")
-		err = cmd.Run()
-		if err != nil {
-			return fmt.Errorf("failed to add all files to staging: %v", err)
-		}
-
 		if err := worktree.Checkout(&git.CheckoutOptions{
 			Branch: plumbing.NewBranchReferenceName(baseBranch),
 		}); err != nil {
