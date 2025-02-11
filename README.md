@@ -117,4 +117,4 @@ branches:
 
 
 ## ライセンス
-MIT
+MITtest
